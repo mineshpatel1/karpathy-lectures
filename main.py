@@ -39,6 +39,19 @@ class Value:
         for val in reversed(self.graph):
             val._backward()
 
+    def exp(self) -> Value:
+        x = self.data
+        t = math.exp(x)
+        out = Value(t, (self,))
+
+        # y = e^x
+        # dy/dx = e^x
+        def _backward():
+            self.grad += t * out.grad  # Chain rule multiplies derivative of out
+
+        out._backward = _backward
+        return out
+
     def tanh(self) -> Value:
         x = self.data
         t = (math.exp(2 * x) - 1) / (math.exp(2 * x) + 1)
@@ -57,10 +70,8 @@ class Value:
         return f"{label}({round(self.data, 3)}, grad={round(self.grad, 3)})"
 
     def __add__(self, other: Union[Value, float]) -> Value:
-        if isinstance(other, Value):
-            out = Value(self.data + other.data, (self, other))
-        else:
-            out = Value(self.data + other, (self,))
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data, (self, other))
 
         # y = x + z
         # dy/dx = 1
@@ -74,10 +85,8 @@ class Value:
         return out
 
     def __mul__(self, other: Union[Value, float]) -> Value:
-        if isinstance(other, Value):
-            out = Value(self.data * other.data, (self, other))
-        else:
-            out = Value(self.data * other, (self,))
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data * other.data, (self, other))
 
         # y = xz
         # dy/dx = z
@@ -90,6 +99,18 @@ class Value:
         out._backward = _backward
         return out
 
+    def __pow__(self, power) -> Value:
+        assert isinstance(power, (float, int))
+        out = Value(self.data ** power, (self,))
+
+        # y = x^3
+        # dy/dx = 3x^2
+        def _backward():
+            self.grad += (power * (self.data ** (power - 1))) * out.grad
+
+        out._backward = _backward
+        return out
+
     def __neg__(self) -> Value:
         return self * -1
 
@@ -98,6 +119,9 @@ class Value:
 
     def __rmul__(self, other: Union[Value, float]) -> Value:
         return self * other
+
+    def __truediv__(self, other) -> Value:
+        return self * (other ** -1)
 
 
 def main():
@@ -116,11 +140,15 @@ def main():
     sum_xw.label = "sum_xw"
     n = sum_xw + b
     n.label = "n"
-    o = n.tanh()
+
+    # All these tanh expressions are equivalent
+    # o = n.tanh()
+    # o = (((n.exp()) ** 2) - 1) / (((n.exp()) ** 2) + 1)
+    e = (2 * n).exp()
+    o = (e - 1) / (e + 1)
     o.label = "o"
 
     o.backward()  # Back Propagation
-
     for node in o.graph:
         print(node)
 
